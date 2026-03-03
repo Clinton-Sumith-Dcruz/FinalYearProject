@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import axios from "axios";
 import { motion } from "framer-motion";
 import {
   FaUsers,
@@ -22,12 +23,42 @@ import {
 export default function AdminDashboard() {
   const [active, setActive] = useState("overview");
 
+  const [users, setUsers] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [orders, setOrders] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const u = await axios.get("http://localhost:5000/api/admin/users");
+        const p = await axios.get("http://localhost:5000/api/admin/products");
+        const o = await axios.get("http://localhost:5000/api/admin/orders");
+
+        setUsers(u.data);
+        setProducts(p.data);
+        setOrders(o.data);
+      } catch (err) {
+        console.log("ADMIN FETCH ERROR:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const revenue = orders.reduce(
+    (acc, o) => acc + Number(o.total_amount || 0),
+    0
+  );
+
   return (
     <div className="flex h-screen bg-gradient-to-br from-[#f8f6f2] to-[#ece7df]">
 
       {/* SIDEBAR */}
       <div className="w-64 bg-black text-white p-6 flex flex-col justify-between">
-
         <div>
           <h1 className="text-yellow-500 text-2xl mb-10">ADMIN</h1>
 
@@ -47,7 +78,16 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        <button className="text-red-500">Logout</button>
+        {/* ✅ LOGOUT */}
+        <button
+          onClick={() => {
+            localStorage.clear();
+            window.location.href = "/admin-login";
+          }}
+          className="text-red-500"
+        >
+          Logout
+        </button>
       </div>
 
       {/* MAIN */}
@@ -55,7 +95,6 @@ export default function AdminDashboard() {
 
         {/* TOP BAR */}
         <div className="flex justify-between items-center mb-10">
-
           <div className="relative w-96">
             <FaSearch className="absolute top-4 left-4 text-gray-400" />
             <input
@@ -72,10 +111,24 @@ export default function AdminDashboard() {
 
         <h1 className="text-3xl font-semibold mb-8 capitalize">{active}</h1>
 
-        {active === "overview" && <Overview />}
-        {active === "users" && <Users />}
-        {active === "products" && <Products />}
-        {active === "orders" && <Orders />}
+        {loading ? (
+          <p>Loading...</p>
+        ) : (
+          <>
+            {active === "overview" && (
+              <Overview
+                users={users}
+                products={products}
+                orders={orders}
+                revenue={revenue}
+              />
+            )}
+
+            {active === "users" && <Users users={users} />}
+            {active === "products" && <Products products={products} />}
+            {active === "orders" && <Orders orders={orders} />}
+          </>
+        )}
       </div>
     </div>
   );
@@ -83,36 +136,33 @@ export default function AdminDashboard() {
 
 /* ================= OVERVIEW ================= */
 
-function Overview() {
+function Overview({ users, products, orders, revenue }) {
 
-  const data = [
-    { name: "Jan", revenue: 12000, orders: 40 },
-    { name: "Feb", revenue: 21000, orders: 65 },
-    { name: "Mar", revenue: 18000, orders: 52 },
-    { name: "Apr", revenue: 27800, orders: 80 },
-    { name: "May", revenue: 32000, orders: 95 },
-    { name: "Jun", revenue: 41000, orders: 120 },
-    { name: "Jul", revenue: 45000, orders: 150 },
-    { name: "Aug", revenue: 55000, orders: 120 },
-    { name: "Sept", revenue: 58000, orders: 120 },
-    { name: "Oct", revenue: 60000, orders: 120 },
-    { name: "Nov", revenue: 70000, orders: 120 },
-    { name: "Dec", revenue: 70500, orders: 120 }
-  ];
+  // ✅ MONTHLY SALES DATA
+  const data = Array.from({ length: 12 }, (_, i) => {
+    const monthOrders = orders.filter(
+      (o) => new Date(o.created_at).getMonth() === i
+    );
+
+    return {
+      name: new Date(0, i).toLocaleString("default", { month: "short" }),
+      revenue: monthOrders.reduce(
+        (sum, o) => sum + Number(o.total_amount),
+        0
+      ),
+      orders: monthOrders.length,
+    };
+  });
 
   return (
     <>
-      {/* KPI CARDS */}
       <div className="grid grid-cols-4 gap-6 mb-10">
-
-        <Card title="Users" value="1,240" icon={<FaUsers />} />
-        <Card title="Products" value="84" icon={<FaBoxOpen />} />
-        <Card title="Orders" value="320" icon={<FaShoppingCart />} />
-        <Card title="Revenue" value="₹8.4L" icon={<FaRupeeSign />} />
-
+        <Card title="Users" value={users.length} icon={<FaUsers />} />
+        <Card title="Products" value={products.length} icon={<FaBoxOpen />} />
+        <Card title="Orders" value={orders.length} icon={<FaShoppingCart />} />
+        <Card title="Revenue" value={`₹${revenue}`} icon={<FaRupeeSign />} />
       </div>
 
-      {/* CHART */}
       <motion.div
         className="bg-white p-8 rounded-2xl shadow"
         initial={{ opacity: 0, y: 40 }}
@@ -128,19 +178,8 @@ function Overview() {
               <YAxis />
               <Tooltip />
 
-              <Line
-                type="monotone"
-                dataKey="revenue"
-                stroke="#eab308"
-                strokeWidth={3}
-              />
-
-              <Line
-                type="monotone"
-                dataKey="orders"
-                stroke="#000"
-                strokeWidth={2}
-              />
+              <Line type="monotone" dataKey="revenue" stroke="#eab308" strokeWidth={3}/>
+              <Line type="monotone" dataKey="orders" stroke="#000" strokeWidth={2}/>
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -151,30 +190,68 @@ function Overview() {
 
 /* ================= USERS ================= */
 
-function Users() {
+function Users({ users }) {
+  if (!users.length) return <Empty text="No users found" />;
+
   return (
     <div className="bg-white p-8 rounded-2xl shadow">
-      Users management UI
+      {users.map(u => (
+        <div key={u.id} className="border-b py-2">
+          <p className="font-semibold">{u.name}</p>
+          <p className="text-sm text-gray-500">{u.email}</p>
+        </div>
+      ))}
     </div>
   );
 }
 
 /* ================= PRODUCTS ================= */
 
-function Products() {
+function Products({ products }) {
+  if (!products.length) return <Empty text="No products found" />;
+
   return (
-    <div className="bg-white p-8 rounded-2xl shadow">
-      Products management UI
+    <div className="bg-white p-8 rounded-2xl shadow grid grid-cols-3 gap-6">
+      {products.map(p => (
+        <div key={p.id} className="border p-4 rounded-lg">
+          <img src={p.image} className="h-32 w-full object-contain mb-2" />
+          <p>{p.name}</p>
+          <p className="text-yellow-600 font-bold">₹ {p.price}</p>
+        </div>
+      ))}
     </div>
   );
 }
 
 /* ================= ORDERS ================= */
 
-function Orders() {
+function Orders({ orders }) {
+  if (!orders.length) return <Empty text="No orders found" />;
+
   return (
     <div className="bg-white p-8 rounded-2xl shadow">
-      Orders management UI
+      {orders.map(o => (
+        <div key={o.id} className="flex justify-between border-b py-3">
+          <div>
+            <p>Order #{o.id}</p>
+            <p className="text-sm text-gray-500">
+              {new Date(o.created_at).toLocaleDateString()}
+            </p>
+          </div>
+          <p className="text-yellow-600 font-bold">₹ {o.total_amount}</p>
+          <span>{o.status}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ================= EMPTY ================= */
+
+function Empty({ text }) {
+  return (
+    <div className="bg-white p-8 rounded-2xl shadow text-center text-gray-500">
+      {text}
     </div>
   );
 }

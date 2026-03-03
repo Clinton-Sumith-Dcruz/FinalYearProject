@@ -9,7 +9,7 @@ export default {
       colors: {
         sage: "#9CAF88",
         walnut: "#5D4037",
-        cream: "#f6f4f1",
+        cream: "#fae4d7",
       },
       fontFamily: {
         display: ["Playfair Display", "serif"],
